@@ -1,4 +1,5 @@
 import os
+from langchain_huggingface import HuggingFaceEmbeddings
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -7,6 +8,12 @@ from chain import get_chain, create_session_id, add_pdfs_to_vectorstore, delete_
 from ingest import process_pdfs
 
 app = FastAPI(title="Multi-Doc RAG API")
+# Pre-load model at startup so Render doesn't timeout on first request
+print("Pre-loading embedding model...")
+_embeddings = HuggingFaceEmbeddings(
+    model_name="sentence-transformers/all-MiniLM-L6-v2"
+)
+print("Model ready.")
 
 app.add_middleware(
     CORSMiddleware,
