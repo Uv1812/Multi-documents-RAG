@@ -88,3 +88,7 @@ async def chat_api(request: ChatRequest):
 def end_session(session_id: str):
     delete_session(session_id)
     return {"status": "Session deleted", "session_id": session_id}
+
+if __name__ == "__main__":
+    port = int(os.getenv("PORT", 8000))  
+    uvicorn.run(app, host="0.0.0.0", port=port)
