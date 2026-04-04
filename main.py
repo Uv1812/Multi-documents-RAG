@@ -6,6 +6,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from chain import get_chain, create_session_id, add_pdfs_to_vectorstore, delete_session, vector_db_store, ask_question
 from ingest import process_pdfs
+import embeddings  # triggers model load at startup
 
 app = FastAPI(title="Multi-Doc RAG API")
 # Pre-load model at startup so Render doesn't timeout on first request
