@@ -5,12 +5,13 @@ from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
 from config import hugging_token
 from main import _embeddings
+from embeddings import embedder
 
 os.environ["HUGGINGFACEHUB_API_TOKEN"] = hugging_token
 os.environ["HF_TOKEN"] = hugging_token
 
 def get_embeddings():
-    return _embeddings
+    return embedder
     
 DATA_DIR = "data"
 VECTOR_DIR = "vectorstore/"
