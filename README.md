@@ -4,7 +4,7 @@ A simple and fast RAG (Retrieval-Augmented Generation) chatbot that allows users
 
 Designed with a clean dark-mode UI, smooth chat experience, and accurate retrieval using FAISS.
 
-![Alt text](...)
+![Alt text](https://github.com/user-attachments/assets/10be084d-850d-447a-9468-ce326aa7331f)
 
 ✨ What This Project Does
 Upload multiple PDFs at once
