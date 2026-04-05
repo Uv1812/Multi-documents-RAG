@@ -8,14 +8,17 @@ from config import GROQ_API_KEY
 vector_db_store = {}
 history_store = {}
 
+
 def get_groq_llm():
     return ChatGroq(
         api_key=GROQ_API_KEY,
         model="llama-3.1-8b-instant"
     )
 
+
 def create_session_id() -> str:
     return str(uuid.uuid4())
+
 
 def add_pdfs_to_vectorstore(session_id: str, pdf_vectors: FAISS):
     if session_id in vector_db_store:
@@ -23,28 +26,26 @@ def add_pdfs_to_vectorstore(session_id: str, pdf_vectors: FAISS):
     else:
         vector_db_store[session_id] = pdf_vectors
 
+
 def ask_question(session_id: str, question: str) -> dict:
     if session_id not in vector_db_store:
         raise KeyError(f"No vectorstore for session: {session_id}")
 
-    # Retrieve relevant chunks
     retriever = vector_db_store[session_id].as_retriever(
         search_kwargs={"k": 4}
     )
     docs = retriever.invoke(question)
     context = "\n\n".join(doc.page_content for doc in docs)
 
-    # Build conversation history as messages
     history = history_store.get(session_id, [])
     messages = []
     for human, ai in history:
         messages.append(HumanMessage(content=human))
         messages.append(AIMessage(content=ai))
 
-    # Build prompt
     prompt = ChatPromptTemplate.from_messages([
-        ("system", """You are a helpful assistant that answers questions 
-based on the provided document context. If the answer is not in the 
+        ("system", """You are a helpful assistant that answers questions \
+based on the provided document context. If the answer is not in the \
 context, say 'I don't have information about that in the uploaded documents.'
 
 Context from documents:
@@ -64,11 +65,11 @@ Context from documents:
 
     answer = result.content
 
-    # Save to history
     history.append((question, answer))
     history_store[session_id] = history
 
-    return {"answer": answer, "sources": []}
+    return {"answer": answer}
+
 
 def delete_session(session_id: str):
     vector_db_store.pop(session_id, None)
