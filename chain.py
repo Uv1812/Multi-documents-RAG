@@ -1,7 +1,7 @@
 import uuid
 from langchain_community.vectorstores import FAISS
 from langchain_groq import ChatGroq
-from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import HumanMessage, AIMessage
 from config import GROQ_API_KEY
 
