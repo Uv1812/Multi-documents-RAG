@@ -1,14 +1,12 @@
 import uuid
 from langchain_community.vectorstores import FAISS
-from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_classic.chains import ConversationalRetrievalChain
 from langchain_groq import ChatGroq
+from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.messages import HumanMessage, AIMessage
 from config import GROQ_API_KEY
 
 vector_db_store = {}
-chain_store = {}
-history_store = {}  # we manage history manually
-
+history_store = {}
 
 def get_groq_llm():
     return ChatGroq(
@@ -16,76 +14,62 @@ def get_groq_llm():
         model="llama-3.1-8b-instant"
     )
 
-
 def create_session_id() -> str:
     return str(uuid.uuid4())
-
 
 def add_pdfs_to_vectorstore(session_id: str, pdf_vectors: FAISS):
     if session_id in vector_db_store:
         vector_db_store[session_id].merge_from(pdf_vectors)
-        chain_store.pop(session_id, None)
     else:
         vector_db_store[session_id] = pdf_vectors
 
-
-def get_chain(session_id: str):
-    if session_id in chain_store:
-        return chain_store[session_id]
-
+def ask_question(session_id: str, question: str) -> dict:
     if session_id not in vector_db_store:
         raise KeyError(f"No vectorstore for session: {session_id}")
 
+    # Retrieve relevant chunks
     retriever = vector_db_store[session_id].as_retriever(
         search_kwargs={"k": 4}
     )
+    docs = retriever.invoke(question)
+    context = "\n\n".join(doc.page_content for doc in docs)
+
+    # Build conversation history as messages
+    history = history_store.get(session_id, [])
+    messages = []
+    for human, ai in history:
+        messages.append(HumanMessage(content=human))
+        messages.append(AIMessage(content=ai))
+
+    # Build prompt
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", """You are a helpful assistant that answers questions 
+based on the provided document context. If the answer is not in the 
+context, say 'I don't have information about that in the uploaded documents.'
+
+Context from documents:
+{context}"""),
+        MessagesPlaceholder(variable_name="history"),
+        ("human", "{question}")
+    ])
 
     llm = get_groq_llm()
+    chain = prompt | llm
 
-    # NO memory passed — we handle history ourselves
-    chain = ConversationalRetrievalChain.from_llm(
-        llm=llm,
-        retriever=retriever,
-        return_source_documents=True,
-        verbose=False
-    )
-
-    chain_store[session_id] = chain
-    history_store[session_id] = []  # empty history for new session
-    return chain
-
-
-def ask_question(session_id: str, question: str) -> dict:
-    chain = get_chain(session_id)
-
-    # Get this session's history
-    history = history_store.get(session_id, [])
-
-    # Run chain with history passed explicitly
     result = chain.invoke({
-        "question": question,
-        "chat_history": history
+        "context": context,
+        "history": messages,
+        "question": question
     })
 
-    # Manually append to history as (human, ai) tuples
-    history.append((question, result["answer"]))
+    answer = result.content
+
+    # Save to history
+    history.append((question, answer))
     history_store[session_id] = history
 
-    # Extract sources
-    sources = []
-    seen = set()
-    for doc in result.get("source_documents", []):
-        src = doc.metadata.get("source", "Unknown")
-        page = doc.metadata.get("page", "?")
-        label = f"{src} (page {page})"
-        if label not in seen:
-            seen.add(label)
-            sources.append(label)
-
-    return {"answer": result["answer"], "sources": sources}
-
+    return {"answer": answer, "sources": []}
 
 def delete_session(session_id: str):
     vector_db_store.pop(session_id, None)
-    chain_store.pop(session_id, None)
     history_store.pop(session_id, None)
