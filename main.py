@@ -1,20 +1,18 @@
 import os
-from langchain_huggingface import HuggingFaceEmbeddings
+import uvicorn
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-from chain import get_chain, create_session_id, add_pdfs_to_vectorstore, delete_session, vector_db_store, ask_question
-from ingest import process_pdfs
-import embeddings  # triggers model load at startup
 
-app = FastAPI(title="Multi-Doc RAG API")
-# Pre-load model at startup so Render doesn't timeout on first request
-print("Pre-loading embedding model...")
-_embeddings = HuggingFaceEmbeddings(
-    model_name="sentence-transformers/all-MiniLM-L6-v2"
-)
-print("Model ready.")
+# This triggers embedding model load at startup — must be before chain/ingest
+import embeddings
+
+from chain import create_session_id, add_pdfs_to_vectorstore, delete_session, vector_db_store, ask_question
+from ingest import process_pdfs
+
+app = FastAPI(title="Lumina RAG API")
 
 app.add_middleware(
     CORSMiddleware,
@@ -47,19 +45,18 @@ async def upload_pdfs(session_id: str, files: list[UploadFile] = File(...)):
         raise HTTPException(status_code=400, detail="session_id is required")
 
     pdf_paths = []
-
     try:
-        # Save uploaded files temporarily
         for file in files:
             if not file.filename.endswith(".pdf"):
-                raise HTTPException(status_code=400, detail=f"{file.filename} is not a PDF")
-
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"{file.filename} is not a PDF"
+                )
             path = f"temp_{session_id}_{file.filename}"
             with open(path, "wb") as f:
                 f.write(await file.read())
             pdf_paths.append(path)
 
-        # Process and store vectorstore
         vector_db = process_pdfs(pdf_paths)
         add_pdfs_to_vectorstore(session_id, vector_db)
 
@@ -71,7 +68,6 @@ async def upload_pdfs(session_id: str, files: list[UploadFile] = File(...)):
         }
 
     finally:
-        # Always clean up temp files
         for path in pdf_paths:
             if os.path.exists(path):
                 os.remove(path)
@@ -83,7 +79,7 @@ async def chat_api(request: ChatRequest):
         raise HTTPException(status_code=400, detail="session_id required")
 
     if request.session_id not in vector_db_store:
-        return {"answer": "Please upload PDFs first.", "sources": []}
+        return {"answer": "Please upload PDFs first before asking questions."}
 
     if not request.user_message.strip():
         raise HTTPException(status_code=400, detail="Empty message")
@@ -97,6 +93,7 @@ def end_session(session_id: str):
     delete_session(session_id)
     return {"status": "Session deleted", "session_id": session_id}
 
+
 if __name__ == "__main__":
-    port = int(os.getenv("PORT", 8000))  
+    port = int(os.getenv("PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=port)
