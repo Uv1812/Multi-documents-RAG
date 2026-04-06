@@ -13,7 +13,16 @@ from chain import create_session_id, add_pdfs_to_vectorstore, delete_session, ve
 from ingest import process_pdfs
 
 app = FastAPI(title="Lumina RAG API")
+# Add this health check endpoint — Render pings this to confirm service is up
+@app.get("/health")
+def health_check():
+    return JSONResponse({"status": "ok"})
 
+# Fix the HEAD request on /
+@app.head("/")
+def head_root():
+    return JSONResponse({})
+    
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -31,16 +40,6 @@ class ChatRequest(BaseModel):
 @app.get("/")
 def serve_ui():
     return FileResponse("static/index.html")
-
-# Add this health check endpoint — Render pings this to confirm service is up
-@app.get("/health")
-def health_check():
-    return JSONResponse({"status": "ok"})
-
-# Fix the HEAD request on /
-@app.head("/")
-def head_root():
-    return JSONResponse({})
     
 @app.post("/create_session")
 def create_new_session():
