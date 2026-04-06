@@ -8,8 +8,6 @@ langchain-core
 langchain-groq
 langchain-huggingface
 langchain-text-splitters
-sentence-transformers==2.7.0
 faiss-cpu==1.8.0
 pypdf==4.2.0
 huggingface-hub
-transformers
