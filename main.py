@@ -2,7 +2,7 @@ import os
 import uvicorn
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse,JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -32,7 +32,16 @@ class ChatRequest(BaseModel):
 def serve_ui():
     return FileResponse("static/index.html")
 
+# Add this health check endpoint — Render pings this to confirm service is up
+@app.get("/health")
+def health_check():
+    return JSONResponse({"status": "ok"})
 
+# Fix the HEAD request on /
+@app.head("/")
+def head_root():
+    return JSONResponse({})
+    
 @app.post("/create_session")
 def create_new_session():
     session_id = create_session_id()
