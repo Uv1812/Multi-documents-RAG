@@ -489,14 +489,16 @@ body{
 </div>
 
 <script>
-const API = 'http://localhost:8000';
+// ======================= FIX: Use relative API URLs =======================
+const API = '';  // empty = relative to current origin
+
 let sid = '', ready = false, files = [];
 let sidebarOpen = true; // desktop default: open
 const isMobile = () => window.innerWidth <= 768;
 
-/* ── SIDEBAR TOGGLE (FIXED: no visual overlay dullness) ── */
+/* ── SIDEBAR TOGGLE (no visual overlay dullness) ── */
 function toggleSidebar() {
-  if (!isMobile()) return;  // do nothing on desktop
+  if (!isMobile()) return;
   const left = document.getElementById('left');
   const overlay = document.getElementById('overlay');
   const isOpen = left.classList.contains('open');
@@ -514,82 +516,53 @@ function closeSidebarMobile() {
   document.getElementById('overlay').classList.remove('show');
 }
 
-function updateToggleIcon() {
-  const icon = document.getElementById('toggle-icon');
-  if (sidebarOpen) {
-    icon.innerHTML = `
-      <rect x="3" y="3" width="7" height="18" rx="1.5"/>
-      <rect x="12" y="3" width="9" height="4" rx="1"/>
-      <rect x="12" y="10" width="9" height="4" rx="1"/>
-      <rect x="12" y="17" width="9" height="4" rx="1"/>`;
-  } else {
-    icon.innerHTML = `
-      <line x1="3" y1="7" x2="21" y2="7"/>
-      <line x1="3" y1="12" x2="21" y2="12"/>
-      <line x1="3" y1="17" x2="21" y2="17"/>`;
-  }
-}
-
-/* Handle resize: ensure consistent state */
-window.addEventListener('resize', () => {
-  const left = document.getElementById('left');
-  const overlay = document.getElementById('overlay');
-  if (!isMobile()) {
-    // Desktop: force sidebar open and remove any overlay
-    left.classList.remove('collapsed', 'open');
-    overlay.classList.remove('show');
-    // Ensure no transform overrides
-    left.style.transform = '';
-  } else {
-    // Mobile: reset desktop classes
-    left.classList.remove('collapsed');
-    // Keep mobile state as is (open/closed controlled by user)
-  }
-});
-
-/* ── INIT ── */
-window.onload = () => initSession();
-
-/* ── SESSION ── */
-function initSession() {
-  fetch(`${API}/create_session`, {method:'POST'})
-    .then(r=>r.json())
-    .then(d=>{
+/* ── SESSION INIT WITH RETRY ── */
+async function initSession(retries = 3) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const res = await fetch(`${API}/create_session`, { method: 'POST' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const d = await res.json();
       sid = d.session_id;
       const el = document.getElementById('sess-ind');
       el.classList.add('show');
       document.getElementById('sess-txt').textContent = sid.slice(0,8)+'…'+sid.slice(-4);
-    })
-    .catch(()=>{
-      const el = document.getElementById('sess-ind');
-      el.classList.add('show');
-      document.getElementById('sess-txt').textContent = 'offline';
-    });
+      console.log('Session created:', sid);
+      return;
+    } catch (err) {
+      console.warn(`Session creation attempt ${i+1} failed:`, err);
+      if (i === retries-1) {
+        const el = document.getElementById('sess-ind');
+        el.classList.add('show');
+        document.getElementById('sess-txt').textContent = 'offline';
+        setStatus('Could not connect to server. Please refresh.', 'err');
+      } else {
+        await new Promise(r => setTimeout(r, 800));
+      }
+    }
+  }
 }
+
 // Show tooltip on mobile when sidebar is initially hidden
 function showMobileTooltip() {
   if (!isMobile()) return;
   const left = document.getElementById('left');
-  // Only show if sidebar is closed
   if (!left.classList.contains('open')) {
-    // Remove any existing tooltip
     const oldTip = document.querySelector('.toggle-tooltip');
     if (oldTip) oldTip.remove();
     const tip = document.createElement('div');
     tip.className = 'toggle-tooltip';
     tip.textContent = 'Open sidebar';
     document.body.appendChild(tip);
-    // Add pulse to button
     const btn = document.getElementById('toggle-btn');
     btn.classList.add('pulse-once');
     setTimeout(() => btn.classList.remove('pulse-once'), 1200);
-    // Remove tooltip after animation
     setTimeout(() => tip.remove(), 4000);
   }
 }
 
-// Call it after page load
 window.addEventListener('load', () => {
+  initSession();
   setTimeout(showMobileTooltip, 500);
 });
 
@@ -641,8 +614,11 @@ dz.addEventListener('dragleave',()=>dz.classList.remove('drag'));
 dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('drag');onFileSelect(e.dataTransfer.files)});
 
 /* ── UPLOAD ── */
-function uploadDocs() {
-  if(!sid||!files.length) return;
+async function uploadDocs() {
+  if(!sid || !files.length) {
+    setStatus('No session or files selected.', 'err');
+    return;
+  }
   const btn=document.getElementById('up-btn');
   const pt=document.getElementById('prog-track');
   const pf=document.getElementById('prog-fill');
@@ -653,54 +629,62 @@ function uploadDocs() {
   files.forEach(f=>form.append('files',f));
   setTimeout(()=>pf.style.width='50%',800);
   setTimeout(()=>pf.style.width='80%',2000);
-  fetch(`${API}/upload_pdfs?session_id=${sid}`,{method:'POST',body:form})
-    .then(r=>r.json())
-    .then(d=>{
-      pf.style.width='100%';
-      setTimeout(()=>{pt.style.display='none';pf.style.width='0%'},700);
-      if(d.status==='success'){
-        setStatus('✓ '+d.message,'ok');
-        ready=true; setReady(true);
-        document.getElementById('send-btn').disabled=false;
-        document.getElementById('welcome')?.remove();
-        addBot(`Documents are ready. I've indexed:\n${d.files.map(f=>'  · '+f).join('\n')}\n\nAsk me anything — I remember our conversation.`);
-        if(isMobile()) closeSidebarMobile();
-      } else {
-        setStatus('Upload failed. Please try again.','err');
-      }
-      btn.textContent='Process Documents'; btn.disabled=false;
-    })
-    .catch(()=>{
-      setStatus('Cannot reach the server. Is it running?','err');
-      btn.textContent='Process Documents'; btn.disabled=false;
-      pt.style.display='none';
-    });
+  
+  try {
+    const res = await fetch(`${API}/upload_pdfs?session_id=${sid}`, { method:'POST', body:form });
+    const data = await res.json();
+    pf.style.width='100%';
+    setTimeout(()=>{pt.style.display='none';pf.style.width='0%'},700);
+    if(res.ok && data.status==='success') {
+      setStatus('✓ '+data.message,'ok');
+      ready=true; setReady(true);
+      document.getElementById('send-btn').disabled=false;
+      const welcomeDiv = document.getElementById('welcome');
+      if(welcomeDiv) welcomeDiv.remove();
+      addBot(`Documents are ready. I've indexed:\n${data.files.map(f=>'  · '+f).join('\n')}\n\nAsk me anything — I remember our conversation.`);
+      if(isMobile()) closeSidebarMobile();
+    } else {
+      setStatus('Upload failed: ' + (data.detail || 'unknown error'), 'err');
+    }
+  } catch(e) {
+    setStatus('Cannot reach the server. Is it running?', 'err');
+    console.error(e);
+  } finally {
+    btn.textContent='Process Documents'; btn.disabled=false;
+    if(!ready) pt.style.display='none';
+  }
 }
 
 /* ── CHAT ── */
-function sendMsg(){
+async function sendMsg(){
   const el=document.getElementById('question');
   const q=el.value.trim();
   if(!q) return;
-  if(!ready){addBot('Please upload and process PDFs first.');return;}
+  if(!ready){
+    addBot('Please upload and process PDFs first.');
+    return;
+  }
   document.getElementById('welcome')?.remove();
   addUser(q);
   el.value=''; el.style.height='auto';
   document.getElementById('typing-wrap').style.display='flex';
   document.getElementById('send-btn').disabled=true;
   scrollDown();
-  fetch(`${API}/chat`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session_id:sid,user_message:q})})
-    .then(r=>r.json())
-    .then(d=>{
-      document.getElementById('typing-wrap').style.display='none';
-      addBot(d.answer);
-      document.getElementById('send-btn').disabled=false;
-    })
-    .catch(()=>{
-      document.getElementById('typing-wrap').style.display='none';
-      addBot('Connection error. Is the backend running?');
-      document.getElementById('send-btn').disabled=false;
+  try {
+    const res = await fetch(`${API}/chat`, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({session_id:sid, user_message:q})
     });
+    const data = await res.json();
+    document.getElementById('typing-wrap').style.display='none';
+    addBot(data.answer || 'No response from server.');
+  } catch(e) {
+    document.getElementById('typing-wrap').style.display='none';
+    addBot('Connection error. Please check the backend.');
+  } finally {
+    document.getElementById('send-btn').disabled=false;
+  }
 }
 
 function onKey(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMsg()}}
