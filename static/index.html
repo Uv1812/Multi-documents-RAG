@@ -609,7 +609,6 @@ body{
 #send-btn:hover{transform:translateY(-2px) scale(1.05);box-shadow:0 8px 24px rgba(201,168,76,0.3)}
 #send-btn:hover::after{opacity:1}
 #send-btn:active{transform:scale(0.96)}
-#send-btn:disabled{background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.2);cursor:not-allowed;transform:none;box-shadow:none}
 .send-arrow{width:18px;height:18px;stroke:currentColor;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round}
 
 /* Mobile overlay when panel open */
@@ -891,7 +890,7 @@ body{
         rows="1"
         onkeydown="onKey(event)"
         oninput="autoResize(this)"></textarea>
-      <button id="send-btn" onclick="sendMsg()" disabled title="Send">
+      <button id="send-btn" onclick="sendMsg()" title="Send">
         <svg class="send-arrow" viewBox="0 0 24 24">
           <line x1="5" y1="12" x2="19" y2="12"/>
           <polyline points="13,6 19,12 13,18"/>
@@ -929,20 +928,18 @@ let sid='', ready=false, files=[];
 window.onload = () => {
   initSession();
   setupSwipe();
-  showGuideLabel(); // auto-show guide on load for mobile
+  showGuideLabel();
+  fixDropzoneClick();
 };
 
 /* ── AUTO GUIDE LABEL ── */
 function showGuideLabel(){
-  // Only show on mobile (menu-btn is visible)
   const btn = document.getElementById('menu-btn');
   const guide = document.getElementById('menu-guide');
   if(!btn || !guide) return;
 
-  // Show guide label after 0.8s so page loads first
   setTimeout(()=>{
     guide.style.display = 'block';
-    // Auto-hide after 5 seconds
     setTimeout(()=>{
       guide.style.opacity = '0';
       guide.style.transition = 'opacity 0.5s ease';
@@ -950,7 +947,6 @@ function showGuideLabel(){
     }, 5000);
   }, 800);
 
-  // Also hide immediately when user taps the button
   btn.addEventListener('click', ()=>{ guide.style.display='none'; }, {once:true});
 }
 
@@ -972,7 +968,6 @@ function newSession(){
   sid=''; ready=false; files=[];
   renderFileList();
   document.getElementById('up-btn').disabled=true;
-  document.getElementById('send-btn').disabled=true;
   setStatus('',''); setReady(false);
   document.getElementById('chat-box').innerHTML=welcomeHTML();
   closePanel();
@@ -1017,6 +1012,19 @@ function setupSwipe(){
   drawer.addEventListener('touchend',()=>{isDragging=false;},{passive:true});
 }
 
+/* ── FIX DROPZONE CLICK (prevents panel close, opens file browser) ── */
+function fixDropzoneClick() {
+  const dropzone = document.getElementById('dropzone');
+  const fileInput = document.getElementById('pdf-input');
+  if (!dropzone || !fileInput) return;
+  dropzone.removeAttribute('onclick');
+  dropzone.addEventListener('click', (e) => {
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+    fileInput.click();
+  });
+}
+
 /* ── PDF LIMIT MODAL ── */
 function showLimitModal(allowed, extra){
   document.getElementById('limit-num').textContent = allowed;
@@ -1030,7 +1038,6 @@ function closeLimitModal(){
   document.getElementById('limit-modal').classList.remove('show');
 }
 
-// Close modal on backdrop click
 document.addEventListener('click', e=>{
   const modal = document.getElementById('limit-modal');
   if(e.target === modal) closeLimitModal();
@@ -1069,7 +1076,6 @@ function renderFileList(){
 
 function onFileSelect(fl){
   const incoming = Array.from(fl);
-
   if(incoming.length > MAX_FILES){
     files = incoming.slice(0, MAX_FILES);
     const extra = incoming.length - MAX_FILES;
@@ -1077,10 +1083,8 @@ function onFileSelect(fl){
   } else {
     files = incoming;
   }
-
   renderFileList();
   document.getElementById('up-btn').disabled = files.length === 0;
-  // Reset so same file can be re-selected
   document.getElementById('pdf-input').value = '';
 }
 
@@ -1114,7 +1118,6 @@ function uploadDocs(){
   setStatus('Embedding documents — this may take a moment.','inf');
 
   const form=new FormData();
-  // Append File objects directly — these are stored in memory, not re-read from input
   files.forEach(f=>form.append('files',f));
 
   setTimeout(()=>pf.style.width='55%',900);
@@ -1132,7 +1135,6 @@ function uploadDocs(){
       if(d.status==='success'){
         setStatus('✓ '+d.message,'ok');
         ready=true; setReady(true);
-        document.getElementById('send-btn').disabled=false;
         document.getElementById('welcome')?.remove();
         addBot(`Documents ready. Indexed:\n${d.files.map(f=>'  · '+f).join('\n')}\n\nAsk me anything — I remember our conversation.`);
         closePanel();
@@ -1165,7 +1167,6 @@ function sendMsg(){
   el.value=''; el.style.height='auto';
 
   document.getElementById('typing-wrap').style.display='flex';
-  document.getElementById('send-btn').disabled=true;
   scrollDown();
 
   fetch(`${API}/chat`,{
@@ -1177,12 +1178,10 @@ function sendMsg(){
   .then(d=>{
     document.getElementById('typing-wrap').style.display='none';
     addBot(d.answer);
-    document.getElementById('send-btn').disabled=false;
   })
   .catch(()=>{
     document.getElementById('typing-wrap').style.display='none';
     addBot('Connection error. Please check your network.');
-    document.getElementById('send-btn').disabled=false;
   });
 }
 
@@ -1245,7 +1244,6 @@ function setReady(on){
   rt.textContent=on?'Live':'Awaiting';
 }
 
-/* Overlay click closes panel */
 document.getElementById('overlay').addEventListener('click',function(){
   if(document.getElementById('left').classList.contains('open')) closePanel();
 });
