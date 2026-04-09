@@ -780,7 +780,7 @@ body{
 <div class="gridlines"></div>
 
 <!-- Mobile overlay backdrop -->
-<div class="overlay" id="overlay" onclick="closePanel()"></div>
+<div class="overlay" id="overlay"></div>
 
 <div id="app">
 
@@ -855,7 +855,7 @@ body{
         <button class="menu-btn" id="menu-btn" onclick="openPanel()" title="Upload PDFs">
           📂
           <span class="menu-guide" id="menu-guide">
-            <span class="guide-arrow">↑</span> Tap here to upload PDFs
+            <span class="guide-arrow"></span> Tap here to upload PDFs
           </span>
         </button>
       </div>
@@ -1022,6 +1022,11 @@ function fixDropzoneClick() {
     e.stopPropagation();
     e.stopImmediatePropagation();
     fileInput.click();
+  });
+  // Prevent file input clicks from bubbling to overlay
+  fileInput.addEventListener('click', (e) => {
+    e.stopPropagation();
+    e.stopImmediatePropagation();
   });
 }
 
@@ -1243,10 +1248,20 @@ function setReady(on){
   rp.className='ready-pill'+(on?' live':'');
   rt.textContent=on?'Live':'Awaiting';
 }
+document.getElementById('left').addEventListener('click', e => e.stopPropagation());
 
-document.getElementById('overlay').addEventListener('click',function(){
-  if(document.getElementById('left').classList.contains('open')) closePanel();
+// Overlay closes panel only when no file picker is active
+let _filePickerOpen = false;
+document.getElementById('pdf-input').addEventListener('click', () => {
+  _filePickerOpen = true;
+  // Reset after browser has had time to open the picker
+  setTimeout(() => { _filePickerOpen = false; }, 500);
 });
+document.getElementById('overlay').addEventListener('click', function() {
+  if (_filePickerOpen) return;
+  if (document.getElementById('left').classList.contains('open')) closePanel();
+});
+
 </script>
 </body>
 </html>
